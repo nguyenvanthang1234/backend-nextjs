@@ -8,7 +8,7 @@ info:
   version: 1.0.11
 servers:
   - url: http://localhost:3001
-  - url: https://api-shop-lks2.onrender.com
+  - url: https://backend-nextjs.onrender.com
 tags:
   - name: auth
     description: Everything about auth
