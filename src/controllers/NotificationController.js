@@ -97,6 +97,45 @@ const deleteNotification = async (req, res) => {
   }
 };
 
+const deleteManyNotifications = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const permissions = req.permissions;
+    const { notificationIds } = req.body;
+
+    if (
+      !notificationIds ||
+      !Array.isArray(notificationIds) ||
+      notificationIds.length === 0
+    ) {
+      return res.status(CONFIG_MESSAGE_ERRORS.INVALID.status).json({
+        status: "Error",
+        typeError: CONFIG_MESSAGE_ERRORS.INVALID.type,
+        message: `The field notificationIds must be a non-empty array`,
+      });
+    }
+
+    const response = await NotificationService.deleteManyNotifications(
+      userId,
+      notificationIds,
+      permissions
+    );
+    const { data, status, typeError, message, statusMessage } = response;
+    return res.status(status).json({
+      typeError,
+      data,
+      message,
+      status: statusMessage,
+    });
+  } catch (e) {
+    return res.status(CONFIG_MESSAGE_ERRORS.INTERNAL_ERROR.status).json({
+      typeError: "Internal Server Error",
+      data: null,
+      status: "Error",
+    });
+  }
+};
+
 const readAllNotification = async (req, res) => {
   try {
     const userId = req.userId;
@@ -124,5 +163,6 @@ module.exports = {
   getListNotifications,
   readOneNotification,
   deleteNotification,
+  deleteManyNotifications,
   readAllNotification,
 };

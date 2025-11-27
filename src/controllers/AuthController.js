@@ -116,8 +116,11 @@ const loginUser = async (req, res) => {
       status: statusMessage,
     });
   } catch (e) {
+    console.log("[LOGIN CONTROLLER DEBUG] Error:", e.message);
+    console.log("[LOGIN CONTROLLER DEBUG] Stack:", e.stack);
     return res.status(CONFIG_MESSAGE_ERRORS.INTERNAL_ERROR.status).json({
       typeError: "Internal Server Error",
+      message: e.message,
       data: null,
       status: "Error",
     });

@@ -50,6 +50,8 @@ const loginUser = (userLogin) => {
   return new Promise(async (resolve, reject) => {
     const { email, password, deviceToken } = userLogin;
     try {
+      console.log("[LOGIN DEBUG] Attempting login for email:", email);
+      
       const checkUser = await User.findOne({
         email: email,
         userType: CONFIG_USER_TYPE.DEFAULT,
@@ -58,10 +60,20 @@ const loginUser = (userLogin) => {
         select: "name permissions",
       });
 
-      const hash = bcrypt.hashSync("123456789Kha@", 10);
+      console.log("[LOGIN DEBUG] User found:", checkUser ? "Yes" : "No");
+      if (checkUser) {
+        console.log("[LOGIN DEBUG] User details:", {
+          id: checkUser._id,
+          email: checkUser.email,
+          hasPassword: !!checkUser.password,
+          role: checkUser.role,
+          userType: checkUser.userType
+        });
+      }
 
       if (checkUser === null) {
-        resolve({
+        console.log("[LOGIN DEBUG] User not found in database");
+        return resolve({
           status: CONFIG_MESSAGE_ERRORS.INVALID.status,
           message: "The username or password is wrong",
           typeError: CONFIG_MESSAGE_ERRORS.INVALID.type,
@@ -69,10 +81,13 @@ const loginUser = (userLogin) => {
           statusMessage: "Error",
         });
       }
+      
       const comparePassword = bcrypt.compareSync(password, checkUser.password);
+      console.log("[LOGIN DEBUG] Password match:", comparePassword);
 
       if (!comparePassword) {
-        resolve({
+        console.log("[LOGIN DEBUG] Password does not match");
+        return resolve({
           status: CONFIG_MESSAGE_ERRORS.INVALID.status,
           message: "The username or password is wrong",
           typeError: CONFIG_MESSAGE_ERRORS.INVALID.type,
@@ -104,6 +119,7 @@ const loginUser = (userLogin) => {
         process.env.REFRESH_TOKEN_EXPIRE
       );
 
+      console.log("[LOGIN DEBUG] Login successful for user:", checkUser.email);
       resolve({
         status: CONFIG_MESSAGE_ERRORS.ACTION_SUCCESS.status,
         message: "Login Success",
@@ -114,6 +130,8 @@ const loginUser = (userLogin) => {
         refresh_token,
       });
     } catch (e) {
+      console.log("[LOGIN DEBUG] Error occurred:", e.message);
+      console.log("[LOGIN DEBUG] Error stack:", e.stack);
       reject(e);
     }
   });

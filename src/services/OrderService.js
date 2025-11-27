@@ -1,12 +1,14 @@
 const { CONFIG_MESSAGE_ERRORS, PAYMENT_TYPES, CONTEXT_NOTIFICATION, ACTION_NOTIFICATION_ORDER } = require("../configs");
 const Order = require("../models/OrderProduct");
 const Product = require("../models/ProductModel");
+const User = require("../models/UserModel");
 const EmailService = require("../services/EmailService");
 const { preparePaginationAndSorting, buildQuery } = require("../utils");
 const mongoose = require("mongoose");
 const PaymentType = require("../models/PaymentType");
 const { pushNotification, getUserAndAdminTokens } = require("./NotificationService");
 const moment = require("moment/moment");
+const { emailQueue } = require("../queues");
 
 const updateProductStock = async (order) => {
   try {
@@ -117,7 +119,23 @@ const createOrder = (newOrder) => {
           recipientIds,
           deviceTokens,
         });
-        // await EmailService.sendEmailCreateOrder(email, orderItems);
+
+        // Get user email from database if not provided
+        let userEmail = email;
+        if (!userEmail && user) {
+          const userData = await User.findById(user).select("email");
+          userEmail = userData?.email;
+        }
+
+        // Queue email sending only if we have a valid email
+        if (userEmail) {
+          await emailQueue.add({
+            type: "CREATE_ORDER",
+            data: { email: userEmail, orderItems },
+          });
+        } else {
+          console.warn(`⚠️ No email found for user ${user}, skipping order confirmation email`);
+        }
 
         if (createdOrder) {
           resolve({

@@ -8,6 +8,8 @@ info:
   version: 1.0.11
 servers:
   - url: https://backend-nextjs.onrender.com/
+  - url: http://localhost:3002
+
 tags:
   - name: auth
     description: Everything about auth
@@ -19,7 +21,237 @@ tags:
     externalDocs:
       description: Find out more
       url: http://swagger.io
+  - name: chat
+    description: RAG Chatbot AI - Tư vấn sản phẩm thông minh
+    externalDocs:
+      description: Tìm hiểu thêm về RAG
+      url: http://swagger.io
 paths:
+  # ==================== CHAT API (RAG Chatbot) ====================
+  /api/chat:
+    post:
+      tags:
+        - chat
+      summary: Chat với AI Chatbot (RAG)
+      description: Gửi tin nhắn và nhận phản hồi từ AI chatbot được tích hợp RAG để tư vấn sản phẩm
+      operationId: chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  description: Tin nhắn của người dùng
+                  example: "Tìm cho mình giày chạy bộ dưới 2 triệu"
+                conversationHistory:
+                  type: array
+                  description: Lịch sử hội thoại format đơn giản (optional)
+                  items:
+                    type: object
+                    properties:
+                      role:
+                        type: string
+                        enum: [user, assistant]
+                        example: "user"
+                      content:
+                        type: string
+                        example: "Xin chào"
+                history:
+                  type: array
+                  description: Lịch sử hội thoại format Gemini (optional)
+                  items:
+                    type: object
+                    properties:
+                      role:
+                        type: string
+                        enum: [user, model]
+                        example: "user"
+                      parts:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            text:
+                              type: string
+                              example: "Xin chào"
+              required:
+                - message
+      responses:
+        "200":
+          description: Chat thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "Success"
+                  message:
+                    type: string
+                    example: "Chat thành công"
+                  typeError:
+                    type: string
+                    example: ""
+                  data:
+                    type: object
+                    properties:
+                      response:
+                        type: string
+                        description: Câu trả lời từ AI
+                        example: "Chào bạn! Dựa trên yêu cầu của bạn, mình có một số gợi ý..."
+                      relatedProducts:
+                        type: array
+                        description: Danh sách sản phẩm liên quan
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                            name:
+                              type: string
+                            slug:
+                              type: string
+                            image:
+                              type: string
+                            price:
+                              type: number
+                            discount:
+                              type: number
+                            actualPrice:
+                              type: number
+                      filters:
+                        type: object
+                        description: Các filter được trích xuất từ câu hỏi
+                        properties:
+                          maxPrice:
+                            type: number
+                          minPrice:
+                            type: number
+                          keywords:
+                            type: array
+                            items:
+                              type: string
+        "400":
+          description: INVALID - Tin nhắn không hợp lệ
+        "500":
+          description: INTERNAL_SERVER_ERROR
+
+  /api/chat/suggestions:
+    get:
+      tags:
+        - chat
+      summary: Lấy danh sách câu hỏi gợi ý
+      description: Trả về danh sách các câu hỏi mẫu để người dùng có thể bắt đầu hội thoại
+      operationId: getSuggestedQuestions
+      responses:
+        "200":
+          description: Lấy gợi ý thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "Success"
+                  message:
+                    type: string
+                    example: "Lấy gợi ý câu hỏi thành công"
+                  typeError:
+                    type: string
+                    example: ""
+                  data:
+                    type: object
+                    properties:
+                      questions:
+                        type: array
+                        items:
+                          type: string
+                        example:
+                          - "Tìm sản phẩm dưới 500 nghìn"
+                          - "Sản phẩm bán chạy nhất là gì?"
+                          - "Có sản phẩm nào đang giảm giá không?"
+                          - "Gợi ý sản phẩm cho tôi"
+        "500":
+          description: INTERNAL_SERVER_ERROR
+
+  /api/chat/search:
+    post:
+      tags:
+        - chat
+      summary: Tìm kiếm sản phẩm bằng ngôn ngữ tự nhiên
+      description: Tìm kiếm sản phẩm dựa trên câu truy vấn ngôn ngữ tự nhiên (không qua AI)
+      operationId: searchProducts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query:
+                  type: string
+                  description: Câu truy vấn tìm kiếm
+                  example: "giày dưới 1 triệu màu đỏ"
+              required:
+                - query
+      responses:
+        "200":
+          description: Tìm kiếm thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "Success"
+                  message:
+                    type: string
+                    example: "Tìm kiếm thành công"
+                  typeError:
+                    type: string
+                    example: ""
+                  data:
+                    type: object
+                    properties:
+                      products:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                            name:
+                              type: string
+                            slug:
+                              type: string
+                            image:
+                              type: string
+                            price:
+                              type: number
+                            discount:
+                              type: number
+                            actualPrice:
+                              type: number
+                            type:
+                              type: string
+                            countInStock:
+                              type: number
+                      filters:
+                        type: object
+                      total:
+                        type: number
+        "400":
+          description: INVALID - Query không hợp lệ
+        "500":
+          description: INTERNAL_SERVER_ERROR
+
+  # ==================== AUTH API ====================
   /api/auth/login:
     post:
       tags:
@@ -35,10 +267,10 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: admin@gmail.com
+                  example: ThangAdmin@gmail.com
                 password:
                   type: string
-                  example: 123456789Kha@
+                  example: Thangdai03@
               required:
                 - email
                 - password
@@ -5061,6 +5293,41 @@ paths:
           description: INTERNAL_SERVER_ERROR
         "409":
           description: ALREADY_EXIST
+        "400":
+          description: INVALID
+      security:
+        - bearerAuth: []
+
+  /api/notifications/delete-many:
+    delete:
+      tags:
+        - notifications
+      summary: Delete many notifications
+      description: Delete multiple notifications by IDs
+      operationId: deleteManyNotifications
+      requestBody:
+        description: Array of notification IDs to delete
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notificationIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+        "401":
+          description: UNAUTHORIZED
+        "500":
+          description: INTERNAL_SERVER_ERROR
         "400":
           description: INVALID
       security:

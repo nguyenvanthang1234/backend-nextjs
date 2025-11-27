@@ -12,6 +12,8 @@ const PaymentTypeRouter = require("./PaymentTypeRouter");
 const ReportRouter = require("./ReportRouter");
 const NotificationRouter = require("./NotificationRouter");
 const CommentRouter = require("./CommentRouter");
+const QueueRouter = require("./QueueRouter");
+const ChatRouter = require("./ChatRouter");
 
 const routes = (app) => {
   app.use("/api/auth", AuthRouter);
@@ -28,6 +30,8 @@ const routes = (app) => {
   app.use("/api/report", ReportRouter);
   app.use("/api/notifications", NotificationRouter);
   app.use("/api/comments", CommentRouter);
+  app.use("/api/chat", ChatRouter); // RAG Chatbot
+  app.use("/api", QueueRouter); // Queue Dashboard
 };
 
 module.exports = routes;

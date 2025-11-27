@@ -8,6 +8,7 @@ const User = require("../models/UserModel");
 const Role = require("../models/RoleModel");
 const { uniqueValuesArr } = require("../utils");
 const { getMessaging } = require("firebase-admin/messaging");
+const { notificationQueue } = require("../queues");
 
 const pushMessageToFirebase = async (data) => {
   const { deviceTokens, title, body } = data;
@@ -19,7 +20,8 @@ const pushMessageToFirebase = async (data) => {
     tokens: deviceTokens,
   };
 
-  await getMessaging().sendMulticast(message);
+  // Use sendEachForMulticast instead of deprecated sendMulticast
+  await getMessaging().sendEachForMulticast(message);
 };
 
 const getUserAndAdminTokens = async (userId) => {
@@ -51,43 +53,22 @@ const pushNotification = (newNotification) => {
       const { context, title, body, referenceId, recipientIds, deviceTokens } =
         newNotification;
 
-      const notificationCreate = {
+      // Queue notification job instead of processing synchronously
+      await notificationQueue.add({
         context,
         title,
         body,
         referenceId,
-        recipientIds: recipientIds.map((userId) => ({ userId, isRead: false })),
-        isRead: false,
-      };
-
-      const createdNotification = await Notification.create(notificationCreate);
-      if (deviceTokens.length > 0) {
-        const mapTitle = {
-          [ACTION_NOTIFICATION_ORDER.CANCEL_ORDER]: "Hủy đơn hàng",
-          [ACTION_NOTIFICATION_ORDER.CREATE_ORDER]: "Đặt đơn hàng",
-          [ACTION_NOTIFICATION_ORDER.WAIT_PAYMENT]: "Đơn hàng chờ thanh toán",
-          [ACTION_NOTIFICATION_ORDER.WAIT_DELIVERY]: "Đơn hàng chờ giao hàng",
-          [ACTION_NOTIFICATION_ORDER.DONE_ORDER]: "Hoàn thành đơn hàng",
-          [ACTION_NOTIFICATION_ORDER.IS_DELIVERED]: "Đơn hàng đã được giao",
-          [ACTION_NOTIFICATION_ORDER.IS_PAID]: "Đơn hàng đã được thanh toán",
-          [ACTION_NOTIFICATION_ORDER.PAYMENT_VN_PAY_ERROR]:
-            "Thanh toán vnpay thất bại",
-          [ACTION_NOTIFICATION_ORDER.PAYMENT_VN_PAY_SUCCESS]:
-            "Thanh toán vnpay thành công",
-        };
-        await pushMessageToFirebase({
-          deviceTokens,
-          title: mapTitle[title] || title,
-          body,
-        });
-      }
+        recipientIds,
+        deviceTokens,
+      });
 
       resolve({
         status: CONFIG_MESSAGE_ERRORS.ACTION_SUCCESS.status,
-        message: "Created notification Success",
+        message: "Notification queued successfully",
         typeError: "",
         statusMessage: "Success",
-        data: createdNotification,
+        data: { queued: true },
       });
     } catch (e) {
       reject(e);
@@ -361,11 +342,76 @@ const deleteNotification = (userId, notificationId, permissions) => {
   });
 };
 
+const deleteManyNotifications = (userId, notificationIds, permissions) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      // Find all notifications that match the IDs
+      const notifications = await Notification.find({
+        _id: { $in: notificationIds },
+      });
+
+      if (!notifications || notifications.length === 0) {
+        resolve({
+          status: CONFIG_MESSAGE_ERRORS.INVALID.status,
+          message: "No notifications found",
+          typeError: CONFIG_MESSAGE_ERRORS.INVALID.type,
+          data: null,
+          statusMessage: "Error",
+        });
+        return;
+      }
+
+      const promises = notifications.map(async (notification) => {
+        const isUserInRecipients = notification?.recipientIds?.some(
+          (recipient) => recipient?.userId?.toString() === userId?.toString()
+        );
+
+        // Check permissions
+        if (
+          !isUserInRecipients &&
+          !permissions.includes(CONFIG_PERMISSIONS.ADMIN)
+        ) {
+          return; // Skip this notification if unauthorized
+        }
+
+        // Filter out the current user from recipients
+        const updatedRecipientIds = notification?.recipientIds?.filter(
+          (recipient) => recipient?.userId?.toString() !== userId?.toString()
+        );
+
+        // If no recipients left, delete the notification document
+        if (updatedRecipientIds.length === 0) {
+          await Notification.findByIdAndDelete(notification._id);
+        } else {
+          // Update the recipient list if it changed
+          if (notification.recipientIds.length !== updatedRecipientIds.length) {
+            notification.recipientIds = updatedRecipientIds;
+            await notification.save();
+          }
+        }
+      });
+
+      await Promise.all(promises);
+
+      resolve({
+        status: CONFIG_MESSAGE_ERRORS.ACTION_SUCCESS.status,
+        message: "Notifications deleted successfully",
+        typeError: "",
+        data: true,
+        statusMessage: "Success",
+      });
+    } catch (e) {
+      reject(e);
+    }
+  });
+};
+
 module.exports = {
   pushNotification,
   getListNotifications,
   readOneNotification,
   deleteNotification,
+  deleteManyNotifications,
   readAllNotification,
   getUserAndAdminTokens,
 };
