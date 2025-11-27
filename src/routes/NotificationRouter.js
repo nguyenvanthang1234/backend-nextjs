@@ -25,6 +25,12 @@ router.post(
 );
 
 router.delete(
+  "/delete-many",
+  AuthPermission("", true),
+  NotificationController.deleteManyNotifications
+);
+
+router.delete(
   "/:id",
   AuthPermission("", true),
   NotificationController.deleteNotification

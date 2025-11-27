@@ -4,6 +4,7 @@ const dotenv = require("dotenv");
 dotenv.config();
 const Order = require("../models/OrderProduct");
 const { getUserAndAdminTokens, pushNotification } = require("./NotificationService");
+const { paymentQueue } = require("../queues");
 
 function sortObject(obj) {
   let sorted = {};
@@ -115,44 +116,32 @@ const getVNPayIpnPaymentVNPay = (data) => {
           });
           return;
         }
-        const currentTime = moment();
 
-        const formattedCurrentTime = currentTime.format("YYYY-MM-DDTHH:mm:ss.SSSZ");
-        if (existingOrder) {
-          existingOrder.isPaid = 1;
-          existingOrder.paidAt = formattedCurrentTime;
-          existingOrder.status = 1;
-          await existingOrder.save();
-          const { recipientIds, deviceTokens } = await getUserAndAdminTokens(existingOrder.user.toString());
-
-          await pushNotification({
-            context: CONTEXT_NOTIFICATION.PAYMENT_VN_PAY,
-            title: ACTION_NOTIFICATION_ORDER.PAYMENT_VN_PAY_SUCCESS,
-            body: `Đơn hàng với id ${existingOrder?._id?.toString()} đã được thanh toán thành công`,
-            referenceId: existingOrder._id?.toString(),
-            recipientIds,
-            deviceTokens,
-          });
-        }
+        // Queue payment processing instead of blocking
+        await paymentQueue.add({
+          orderId: orderId,
+          paymentStatus: "SUCCESS",
+          paymentMethod: "VNPAY",
+        });
 
         resolve({
           status: CONFIG_MESSAGE_ERRORS.ACTION_SUCCESS.status,
-          message: "Payment success",
+          message: "Payment processing queued",
           typeError: "",
           data: { RspCode: "00", totalPrice: existingOrder.totalPrice },
           statusMessage: "Success",
         });
       } else {
-        const { recipientIds, deviceTokens } = await getUserAndAdminTokens(existingOrder.user.toString());
+        let orderId = vnp_Params["vnp_TxnRef"];
+        const existingOrder = await Order.findById(orderId);
 
-        await pushNotification({
-          context: CONTEXT_NOTIFICATION.PAYMENT_VN_PAY,
-          title: ACTION_NOTIFICATION_ORDER.PAYMENT_VN_PAY_ERROR,
-          body: `Đơn hàng với id ${existingOrder?._id?.toString()} đã toán thành công`,
-          referenceId: existingOrder._id?.toString(),
-          recipientIds,
-          deviceTokens,
+        // Queue payment failure notification
+        await paymentQueue.add({
+          orderId: orderId,
+          paymentStatus: "FAILED",
+          paymentMethod: "VNPAY",
         });
+
         resolve({
           status: CONFIG_MESSAGE_ERRORS.GET_SUCCESS.status,
           message: "Payment failed",
