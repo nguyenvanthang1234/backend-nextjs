@@ -3,6 +3,22 @@ const bcrypt = require("bcrypt");
 const { CONFIG_MESSAGE_ERRORS, CONFIG_USER_TYPE } = require("../configs");
 const { isAdminPermission } = require("../utils");
 const mongoose = require("mongoose");
+const CloudinaryService = require("./CloudinaryService");
+
+// Helper function: Convert publicId sang URL cho array users
+const convertUsersAvatarUrls = (users) => {
+  return users.map(user => {
+    const userData = typeof user.toObject === 'function' ? user.toObject() : user;
+    delete userData.password; // Không trả password
+    if (userData.avatar && !userData.avatar.startsWith('http') && !userData.avatar.startsWith('data:')) {
+      userData.avatarUrl = CloudinaryService.getOptimizedUrl(userData.avatar, 400);
+      userData.avatarThumbnail = CloudinaryService.getThumbnailUrl(userData.avatar, 100);
+    } else if (userData.avatar && userData.avatar.startsWith('http')) {
+      userData.avatarUrl = userData.avatar;
+    }
+    return userData;
+  });
+};
 
 const createUser = (newUser) => {
   return new Promise(async (resolve, reject) => {
@@ -20,6 +36,27 @@ const createUser = (newUser) => {
           statusMessage: "Error",
         });
       }
+
+      // Upload avatar lên Cloudinary nếu là base64
+      let avatarPublicId = avatar;
+      if (avatar && avatar.startsWith('data:image/')) {
+        try {
+          const result = await CloudinaryService.uploadBase64(avatar, 'avatars');
+          avatarPublicId = result.publicId;
+          console.log('✓ Uploaded user avatar to Cloudinary:', avatarPublicId);
+        } catch (uploadError) {
+          console.error('✗ Failed to upload avatar to Cloudinary:', uploadError);
+          resolve({
+            status: CONFIG_MESSAGE_ERRORS.INTERNAL_ERROR.status,
+            message: "Failed to upload avatar",
+            typeError: CONFIG_MESSAGE_ERRORS.INTERNAL_ERROR.type,
+            data: null,
+            statusMessage: "Error",
+          });
+          return;
+        }
+      }
+
       const hash = bcrypt.hashSync(password, 10);
       const userCreate = {
         email,
@@ -29,7 +66,7 @@ const createUser = (newUser) => {
         firstName,
         lastName,
         middleName,
-        avatar,
+        avatar: avatarPublicId,
         status: 1,
       };
       if (city) {
@@ -40,11 +77,21 @@ const createUser = (newUser) => {
       }
       const createdUser = await User.create(userCreate);
       if (createdUser) {
+        // Convert publicId sang URL Cloudinary
+        const userData = createdUser.toObject();
+        delete userData.password; // Không trả password
+        if (userData.avatar && !userData.avatar.startsWith('http') && !userData.avatar.startsWith('data:')) {
+          userData.avatarUrl = CloudinaryService.getOptimizedUrl(userData.avatar, 400);
+          userData.avatarThumbnail = CloudinaryService.getThumbnailUrl(userData.avatar, 100);
+        } else if (userData.avatar && userData.avatar.startsWith('http')) {
+          userData.avatarUrl = userData.avatar;
+        }
+
         resolve({
           status: CONFIG_MESSAGE_ERRORS.ACTION_SUCCESS.status,
           message: "Created user success",
           typeError: "",
-          data: createdUser,
+          data: userData,
           statusMessage: "Success",
         });
       }
@@ -101,6 +148,33 @@ const updateUser = (id, data) => {
           statusMessage: "Error",
         });
       }
+
+      // Upload avatar mới lên Cloudinary nếu có
+      let avatarPublicId = data.avatar;
+      if (data.avatar && data.avatar.startsWith('data:image/')) {
+        try {
+          const result = await CloudinaryService.uploadBase64(data.avatar, 'avatars');
+          avatarPublicId = result.publicId;
+          console.log('✓ Uploaded new user avatar to Cloudinary:', avatarPublicId);
+
+          // Xóa avatar cũ từ Cloudinary
+          if (checkUser.avatar && !checkUser.avatar.startsWith('data:image/') && !checkUser.avatar.startsWith('http')) {
+            await CloudinaryService.deleteFile(checkUser.avatar);
+            console.log('✓ Deleted old avatar from Cloudinary:', checkUser.avatar);
+          }
+        } catch (uploadError) {
+          console.error('✗ Failed to upload avatar to Cloudinary:', uploadError);
+          resolve({
+            status: CONFIG_MESSAGE_ERRORS.INTERNAL_ERROR.status,
+            message: "Failed to upload avatar",
+            typeError: CONFIG_MESSAGE_ERRORS.INTERNAL_ERROR.type,
+            data: null,
+            statusMessage: "Error",
+          });
+          return;
+        }
+      }
+
       const dataUser = {
         email: data.email,
         password: checkUser.password,
@@ -112,7 +186,7 @@ const updateUser = (id, data) => {
         city: checkUser.city,
         role: checkUser.role,
         middleName: data.middleName,
-        avatar: data.avatar,
+        avatar: avatarPublicId,
         status: data.status,
       };
       if (data.city) {
@@ -124,11 +198,22 @@ const updateUser = (id, data) => {
       const updatedUser = await User.findByIdAndUpdate(id, dataUser, {
         new: true,
       });
+
+      // Convert publicId sang URL Cloudinary
+      const userData = updatedUser.toObject();
+      delete userData.password; // Không trả password
+      if (userData.avatar && !userData.avatar.startsWith('http') && !userData.avatar.startsWith('data:')) {
+        userData.avatarUrl = CloudinaryService.getOptimizedUrl(userData.avatar, 400);
+        userData.avatarThumbnail = CloudinaryService.getThumbnailUrl(userData.avatar, 100);
+      } else if (userData.avatar && userData.avatar.startsWith('http')) {
+        userData.avatarUrl = userData.avatar;
+      }
+
       resolve({
         status: CONFIG_MESSAGE_ERRORS.ACTION_SUCCESS.status,
         message: "Updated user success",
         typeError: "",
-        data: updatedUser,
+        data: userData,
         statusMessage: "Success",
       });
     } catch (e) {
@@ -151,6 +236,17 @@ const deleteUser = (id) => {
           data: null,
           statusMessage: "Error",
         });
+      }
+
+      // Xóa avatar từ Cloudinary
+      if (checkUser.avatar && !checkUser.avatar.startsWith('data:image/') && !checkUser.avatar.startsWith('http')) {
+        try {
+          await CloudinaryService.deleteFile(checkUser.avatar);
+          console.log('✓ Deleted user avatar from Cloudinary:', checkUser.avatar);
+        } catch (deleteError) {
+          console.error('✗ Failed to delete avatar from Cloudinary:', deleteError);
+          // Continue with user deletion even if Cloudinary delete fails
+        }
       }
 
       await User.findByIdAndDelete(id);
@@ -271,7 +367,7 @@ const getAllUser = (params) => {
           typeError: "",
           statusMessage: "Success",
           data: {
-            users: allUser,
+            users: convertUsersAvatarUrls(allUser),
             totalPage: 1,
             totalCount: totalCount,
           },
@@ -303,7 +399,7 @@ const getAllUser = (params) => {
         typeError: "",
         statusMessage: "Success",
         data: {
-          users: allUser,
+          users: convertUsersAvatarUrls(allUser),
           totalPage: totalPage,
           totalCount: totalCount,
         },
@@ -337,6 +433,15 @@ const getDetailsUser = (id) => {
         });
         return;
       }
+
+      // Convert Cloudinary publicId to URL
+      if (user.avatar && !user.avatar.startsWith('http') && !user.avatar.startsWith('data:')) {
+        user.avatarUrl = CloudinaryService.getOptimizedUrl(user.avatar, 400);
+        user.avatarThumbnail = CloudinaryService.getThumbnailUrl(user.avatar, 100);
+      } else if (user.avatar && user.avatar.startsWith('http')) {
+        user.avatarUrl = user.avatar;
+      }
+
       resolve({
         status: CONFIG_MESSAGE_ERRORS.GET_SUCCESS.status,
         message: "Success",

@@ -5,8 +5,22 @@ const { CONFIG_MESSAGE_ERRORS, CONFIG_PERMISSIONS, CONFIG_USER_TYPE } = require(
 const EmailService = require("../services/EmailService");
 const dotenv = require("dotenv");
 const { addToBlacklist, isAdminPermission } = require("../utils");
+const CloudinaryService = require("./CloudinaryService");
 dotenv.config();
 const moment = require("moment/moment");
+
+// Helper function: Convert user avatar publicId to URL
+const convertUserAvatarUrl = (user) => {
+  const userData = typeof user.toObject === 'function' ? user.toObject() : { ...user };
+  delete userData.password;
+  if (userData.avatar && !userData.avatar.startsWith('http') && !userData.avatar.startsWith('data:')) {
+    userData.avatarUrl = CloudinaryService.getOptimizedUrl(userData.avatar, 400);
+    userData.avatarThumbnail = CloudinaryService.getThumbnailUrl(userData.avatar, 100);
+  } else if (userData.avatar && userData.avatar.startsWith('http')) {
+    userData.avatarUrl = userData.avatar;
+  }
+  return userData;
+};
 
 const registerUser = (newUser) => {
   return new Promise(async (resolve, reject) => {
@@ -125,7 +139,7 @@ const loginUser = (userLogin) => {
         message: "Login Success",
         typeError: "",
         statusMessage: "Success",
-        data: checkUser,
+        data: convertUserAvatarUrl(checkUser),
         access_token,
         refresh_token,
       });
@@ -226,12 +240,38 @@ const updateAuthMe = (id, data, isPermission) => {
         checkUser.role = data.role;
       }
 
+      // Upload avatar mới lên Cloudinary nếu là base64
+      let avatarPublicId = data.avatar;
+      if (data.avatar && data.avatar.startsWith('data:image/')) {
+        try {
+          const result = await CloudinaryService.uploadBase64(data.avatar, 'avatars');
+          avatarPublicId = result.publicId;
+          console.log('✓ Uploaded new avatar to Cloudinary:', avatarPublicId);
+
+          // Xóa avatar cũ từ Cloudinary
+          if (checkUser.avatar && !checkUser.avatar.startsWith('data:image/') && !checkUser.avatar.startsWith('http')) {
+            await CloudinaryService.deleteFile(checkUser.avatar);
+            console.log('✓ Deleted old avatar from Cloudinary:', checkUser.avatar);
+          }
+        } catch (uploadError) {
+          console.error('✗ Failed to upload avatar to Cloudinary:', uploadError);
+          resolve({
+            status: CONFIG_MESSAGE_ERRORS.INTERNAL_ERROR.status,
+            message: "Failed to upload avatar",
+            typeError: CONFIG_MESSAGE_ERRORS.INTERNAL_ERROR.type,
+            data: null,
+            statusMessage: "Error",
+          });
+          return;
+        }
+      }
+
       checkUser.firstName = data.firstName;
       checkUser.lastName = data.lastName;
       checkUser.middleName = data.middleName;
       checkUser.email = data.email || checkUser.email;
       checkUser.phoneNumber = data.phoneNumber;
-      checkUser.avatar = data.avatar;
+      checkUser.avatar = avatarPublicId;
       checkUser.address = data.address;
       checkUser.addresses = data.addresses || checkUser.addresses;
       await checkUser.save();
@@ -240,7 +280,7 @@ const updateAuthMe = (id, data, isPermission) => {
         status: CONFIG_MESSAGE_ERRORS.ACTION_SUCCESS.status,
         message: "Updated user success",
         typeError: "",
-        data: checkUser,
+        data: convertUserAvatarUrl(checkUser),
         statusMessage: "Success",
       });
     } catch (e) {
@@ -585,7 +625,7 @@ const loginGoogle = (data) => {
         message: "Login Success",
         typeError: "",
         statusMessage: "Success",
-        data: checkUser,
+        data: convertUserAvatarUrl(checkUser),
         access_token,
         refresh_token,
       });
@@ -709,7 +749,7 @@ const loginFacebook = (data) => {
         message: "Login Success",
         typeError: "",
         statusMessage: "Success",
-        data: checkUser,
+        data: convertUserAvatarUrl(checkUser),
         access_token,
         refresh_token,
       });
