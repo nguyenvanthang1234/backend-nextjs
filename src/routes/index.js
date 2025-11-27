@@ -14,6 +14,7 @@ const NotificationRouter = require("./NotificationRouter");
 const CommentRouter = require("./CommentRouter");
 const QueueRouter = require("./QueueRouter");
 const ChatRouter = require("./ChatRouter");
+const UploadRouter = require("./UploadRouter");
 
 const routes = (app) => {
   app.use("/api/auth", AuthRouter);
@@ -31,6 +32,7 @@ const routes = (app) => {
   app.use("/api/notifications", NotificationRouter);
   app.use("/api/comments", CommentRouter);
   app.use("/api/chat", ChatRouter); // RAG Chatbot
+  app.use("/api/upload", UploadRouter); // Cloudinary Upload
   app.use("/api", QueueRouter); // Queue Dashboard
 };
 

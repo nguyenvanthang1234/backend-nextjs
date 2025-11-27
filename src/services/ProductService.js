@@ -2,6 +2,21 @@ const { CONFIG_MESSAGE_ERRORS } = require("../configs");
 const Product = require("../models/ProductModel");
 const User = require("../models/UserModel");
 const mongoose = require("mongoose");
+const CloudinaryService = require("./CloudinaryService");
+
+// Helper function: Convert publicId sang URL cho array products
+const convertProductsImageUrls = (products) => {
+  return products.map(product => {
+    const productData = typeof product.toObject === 'function' ? product.toObject() : product;
+    if (productData.image && !productData.image.startsWith('http') && !productData.image.startsWith('data:')) {
+      productData.imageUrl = CloudinaryService.getOptimizedUrl(productData.image, 800);
+      productData.thumbnailUrl = CloudinaryService.getThumbnailUrl(productData.image, 200);
+    } else if (productData.image && productData.image.startsWith('http')) {
+      productData.imageUrl = productData.image;
+    }
+    return productData;
+  });
+};
 
 const createProduct = (newProduct) => {
   return new Promise(async (resolve, reject) => {
@@ -39,9 +54,30 @@ const createProduct = (newProduct) => {
           statusMessage: "Error",
         });
       }
+
+      // Upload ảnh lên Cloudinary nếu là base64
+      let imagePublicId = image;
+      if (image && image.startsWith('data:image/')) {
+        try {
+          const result = await CloudinaryService.uploadBase64(image, 'products');
+          imagePublicId = result.publicId;
+          console.log('✓ Uploaded product image to Cloudinary:', imagePublicId);
+        } catch (uploadError) {
+          console.error('✗ Failed to upload to Cloudinary:', uploadError);
+          resolve({
+            status: CONFIG_MESSAGE_ERRORS.INTERNAL_ERROR.status,
+            message: "Failed to upload image",
+            typeError: CONFIG_MESSAGE_ERRORS.INTERNAL_ERROR.type,
+            data: null,
+            statusMessage: "Error",
+          });
+          return;
+        }
+      }
+
       const dataCreate = {
         name,
-        image,
+        image: imagePublicId,
         type,
         countInStock: Number(countInStock),
         price,
@@ -58,11 +94,20 @@ const createProduct = (newProduct) => {
       }
       const createdProduct = await Product.create(dataCreate);
       if (createdProduct) {
+        // Convert publicId sang URL Cloudinary
+        const productData = createdProduct.toObject();
+        if (productData.image && !productData.image.startsWith('http') && !productData.image.startsWith('data:')) {
+          productData.imageUrl = CloudinaryService.getOptimizedUrl(productData.image, 800);
+          productData.thumbnailUrl = CloudinaryService.getThumbnailUrl(productData.image, 200);
+        } else if (productData.image && productData.image.startsWith('http')) {
+          productData.imageUrl = productData.image;
+        }
+
         resolve({
           status: CONFIG_MESSAGE_ERRORS.ACTION_SUCCESS.status,
           message: "Created product success",
           typeError: "",
-          data: createdProduct,
+          data: productData,
           statusMessage: "Success",
         });
       }
@@ -107,7 +152,34 @@ const updateProduct = (id, data) => {
           return;
         }
       }
-      const dataCreate = data;
+
+      // Upload ảnh mới lên Cloudinary nếu có
+      let imagePublicId = data.image;
+      if (data.image && data.image.startsWith('data:image/')) {
+        try {
+          const result = await CloudinaryService.uploadBase64(data.image, 'products');
+          imagePublicId = result.publicId;
+          console.log('✓ Uploaded new product image to Cloudinary:', imagePublicId);
+
+          // Xóa ảnh cũ từ Cloudinary
+          if (checkProduct.image && !checkProduct.image.startsWith('data:image/') && !checkProduct.image.startsWith('http')) {
+            await CloudinaryService.deleteFile(checkProduct.image);
+            console.log('✓ Deleted old image from Cloudinary:', checkProduct.image);
+          }
+        } catch (uploadError) {
+          console.error('✗ Failed to upload to Cloudinary:', uploadError);
+          resolve({
+            status: CONFIG_MESSAGE_ERRORS.INTERNAL_ERROR.status,
+            message: "Failed to upload image",
+            typeError: CONFIG_MESSAGE_ERRORS.INTERNAL_ERROR.type,
+            data: null,
+            statusMessage: "Error",
+          });
+          return;
+        }
+      }
+
+      const dataCreate = { ...data, image: imagePublicId };
       if (data.location) {
         dataCreate.location = data.location;
       }
@@ -115,11 +187,21 @@ const updateProduct = (id, data) => {
       const updatedProduct = await Product.findByIdAndUpdate(id, dataCreate, {
         new: true,
       });
+
+      // Convert publicId sang URL Cloudinary
+      const productData = updatedProduct.toObject();
+      if (productData.image && !productData.image.startsWith('http') && !productData.image.startsWith('data:')) {
+        productData.imageUrl = CloudinaryService.getOptimizedUrl(productData.image, 800);
+        productData.thumbnailUrl = CloudinaryService.getThumbnailUrl(productData.image, 200);
+      } else if (productData.image && productData.image.startsWith('http')) {
+        productData.imageUrl = productData.image;
+      }
+
       resolve({
         status: CONFIG_MESSAGE_ERRORS.ACTION_SUCCESS.status,
         message: "Updated product success",
         typeError: "",
-        data: updatedProduct,
+        data: productData,
         statusMessage: "Success",
       });
     } catch (e) {
@@ -142,6 +224,17 @@ const deleteProduct = (id) => {
           data: null,
           statusMessage: "Error",
         });
+      }
+
+      // Xóa ảnh từ Cloudinary
+      if (checkProduct.image && !checkProduct.image.startsWith('data:image/') && !checkProduct.image.startsWith('http')) {
+        try {
+          await CloudinaryService.deleteFile(checkProduct.image);
+          console.log('✓ Deleted product image from Cloudinary:', checkProduct.image);
+        } catch (deleteError) {
+          console.error('✗ Failed to delete from Cloudinary:', deleteError);
+          // Continue with product deletion even if Cloudinary delete fails
+        }
       }
 
       await Product.findByIdAndDelete(id);
@@ -190,11 +283,21 @@ const getDetailsProduct = (id) => {
           statusMessage: "Error",
         });
       }
+
+      // Convert Cloudinary publicId to URL
+      const productData = checkProduct.toObject();
+      if (productData.image && !productData.image.startsWith('http') && !productData.image.startsWith('data:')) {
+        productData.imageUrl = CloudinaryService.getOptimizedUrl(productData.image, 800);
+        productData.thumbnailUrl = CloudinaryService.getThumbnailUrl(productData.image, 200);
+      } else if (productData.image && productData.image.startsWith('http')) {
+        productData.imageUrl = productData.image;
+      }
+
       resolve({
         status: CONFIG_MESSAGE_ERRORS.GET_SUCCESS.status,
         message: "Success",
         typeError: "",
-        data: checkProduct,
+        data: productData,
         statusMessage: "Success",
       });
     } catch (e) {
@@ -249,11 +352,20 @@ const getDetailsProductPublic = (productId, userId, params) => {
         }
       }
 
+      // Convert Cloudinary publicId to URL
+      const productData = checkProduct.toObject();
+      if (productData.image && !productData.image.startsWith('http') && !productData.image.startsWith('data:')) {
+        productData.imageUrl = CloudinaryService.getOptimizedUrl(productData.image, 800);
+        productData.thumbnailUrl = CloudinaryService.getThumbnailUrl(productData.image, 200);
+      } else if (productData.image && productData.image.startsWith('http')) {
+        productData.imageUrl = productData.image;
+      }
+
       resolve({
         status: CONFIG_MESSAGE_ERRORS.GET_SUCCESS.status,
         message: "Success",
         typeError: "",
-        data: checkProduct,
+        data: productData,
         statusMessage: "Success",
       });
     } catch (e) {
@@ -369,11 +481,20 @@ const getDetailsProductPublicBySlug = (slug, userId, params) => {
         );
       }
 
+      // Convert Cloudinary publicId to URL
+      const productData = checkProduct[0];
+      if (productData.image && !productData.image.startsWith('http') && !productData.image.startsWith('data:')) {
+        productData.imageUrl = CloudinaryService.getOptimizedUrl(productData.image, 800);
+        productData.thumbnailUrl = CloudinaryService.getThumbnailUrl(productData.image, 200);
+      } else if (productData.image && productData.image.startsWith('http')) {
+        productData.imageUrl = productData.image;
+      }
+
       resolve({
         status: CONFIG_MESSAGE_ERRORS.GET_SUCCESS.status,
         message: "Success",
         typeError: "",
-        data: checkProduct[0],
+        data: productData,
         statusMessage: "Success",
       });
     } catch (e) {
@@ -530,7 +651,7 @@ const getAllProduct = (params) => {
           typeError: "",
           statusMessage: "Success",
           data: {
-            products: allProduct,
+            products: convertProductsImageUrls(allProduct),
             totalPage: 1,
             totalCount: totalCount,
           },
@@ -600,7 +721,7 @@ const getAllProduct = (params) => {
         typeError: "",
         statusMessage: "Success",
         data: {
-          products: allProduct,
+          products: convertProductsImageUrls(allProduct),
           totalPage: totalPage,
           totalCount: totalCount,
         },
@@ -765,7 +886,7 @@ const getAllProductPublic = (params) => {
           typeError: "",
           statusMessage: "Success",
           data: {
-            products: allProduct,
+            products: convertProductsImageUrls(allProduct),
             totalPage: 1,
             totalCount: totalCount,
           },
@@ -840,7 +961,7 @@ const getAllProductPublic = (params) => {
         typeError: "",
         statusMessage: "Success",
         data: {
-          products: allProduct,
+          products: convertProductsImageUrls(allProduct),
           totalPage: totalPage,
           totalCount: totalCount,
         },
@@ -1030,7 +1151,7 @@ const getAllProductViewed = (userId, params) => {
         message: "Success",
         typeError: "",
         data: {
-          products: viewedProducts,
+          products: convertProductsImageUrls(viewedProducts),
           totalPage: totalPage,
           totalCount: total,
         },
@@ -1088,7 +1209,7 @@ const getAllProductLiked = (userId, params) => {
         message: "Success",
         typeError: "",
         data: {
-          products: likedProducts,
+          products: convertProductsImageUrls(likedProducts),
           totalPage: totalPage,
           totalCount: total,
         },
@@ -1210,7 +1331,7 @@ const getListRelatedProductBySlug = (params) => {
           typeError: "",
           statusMessage: "Success",
           data: {
-            products: allProduct,
+            products: convertProductsImageUrls(allProduct),
             totalPage: totalPage,
             totalCount: totalCount,
           },
@@ -1262,7 +1383,7 @@ const getListRelatedProductBySlug = (params) => {
         typeError: "",
         statusMessage: "Success",
         data: {
-          products: allProduct,
+          products: convertProductsImageUrls(allProduct),
           totalPage: totalPage,
           totalCount: totalCount,
         },

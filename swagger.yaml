@@ -26,6 +26,11 @@ tags:
     externalDocs:
       description: Tìm hiểu thêm về RAG
       url: http://swagger.io
+  - name: upload
+    description: Cloudinary Upload API - Upload và quản lý ảnh
+    externalDocs:
+      description: Cloudinary Documentation
+      url: https://cloudinary.com/documentation
 paths:
   # ==================== CHAT API (RAG Chatbot) ====================
   /api/chat:
@@ -2790,12 +2795,233 @@ paths:
       security:
         - bearerAuth: []
 
+  # ==================== UPLOAD API (Cloudinary) ====================
+  /api/upload:
+    post:
+      tags:
+        - upload
+      summary: Upload file lên Cloudinary (multipart/form-data)
+      description: |
+        Upload file trực tiếp lên Cloudinary qua form-data.
+        **Lưu ý:** Dùng cho upload riêng lẻ. Khi tạo product/user, backend sẽ tự động xử lý upload từ base64.
+      operationId: uploadFile
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: File ảnh cần upload (jpg, png, gif, webp)
+                folder:
+                  type: string
+                  description: Folder trên Cloudinary (products, avatars, etc.)
+                  example: "products"
+              required:
+                - file
+      responses:
+        "200":
+          description: Upload thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "Success"
+                  message:
+                    type: string
+                    example: "Upload successful"
+                  data:
+                    type: object
+                    properties:
+                      publicId:
+                        type: string
+                        example: "products/abc123xyz"
+                      url:
+                        type: string
+                        example: "https://res.cloudinary.com/demo/image/upload/v123/products/abc123xyz.jpg"
+                      secureUrl:
+                        type: string
+                        example: "https://res.cloudinary.com/demo/image/upload/v123/products/abc123xyz.jpg"
+                      format:
+                        type: string
+                        example: "jpg"
+                      width:
+                        type: number
+                        example: 800
+                      height:
+                        type: number
+                        example: 600
+        "400":
+          description: Bad Request - No file provided
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+
+  /api/upload/base64:
+    post:
+      tags:
+        - upload
+      summary: Upload ảnh base64 lên Cloudinary
+      description: |
+        Upload ảnh dạng base64 string lên Cloudinary.
+        **Format:** `data:image/jpeg;base64,/9j/4AAQSkZJRg...`
+      operationId: uploadBase64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                image:
+                  type: string
+                  description: Base64 encoded image string
+                  example: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD..."
+                folder:
+                  type: string
+                  description: Folder trên Cloudinary
+                  example: "products"
+              required:
+                - image
+      responses:
+        "200":
+          description: Upload thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "Success"
+                  data:
+                    type: object
+                    properties:
+                      publicId:
+                        type: string
+                        example: "products/abc123xyz"
+                      url:
+                        type: string
+                        example: "https://res.cloudinary.com/demo/image/upload/v123/products/abc123xyz.jpg"
+                      optimizedUrl:
+                        type: string
+                        example: "https://res.cloudinary.com/demo/image/upload/w_800,q_auto,f_auto/products/abc123xyz"
+                      thumbnailUrl:
+                        type: string
+                        example: "https://res.cloudinary.com/demo/image/upload/w_200,h_200,c_fill,q_auto,f_auto/products/abc123xyz"
+        "400":
+          description: Bad Request - Invalid base64 format
+        "401":
+          description: Unauthorized
+      security:
+        - bearerAuth: []
+
+  /api/upload/optimize/{publicId}:
+    get:
+      tags:
+        - upload
+      summary: Lấy optimized URL từ publicId
+      description: Generate optimized Cloudinary URL với các transformations
+      operationId: getOptimizedUrl
+      parameters:
+        - name: publicId
+          in: path
+          required: true
+          description: Cloudinary public ID
+          schema:
+            type: string
+          example: "products/abc123xyz"
+        - name: width
+          in: query
+          description: Width của ảnh
+          schema:
+            type: number
+          example: 800
+        - name: height
+          in: query
+          description: Height của ảnh
+          schema:
+            type: number
+          example: 600
+      responses:
+        "200":
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "Success"
+                  data:
+                    type: object
+                    properties:
+                      publicId:
+                        type: string
+                      originalUrl:
+                        type: string
+                      optimizedUrl:
+                        type: string
+                      thumbnailUrl:
+                        type: string
+
+  /api/upload/{publicId}:
+    delete:
+      tags:
+        - upload
+      summary: Xóa file từ Cloudinary
+      description: Xóa file từ Cloudinary bằng publicId
+      operationId: deleteFile
+      parameters:
+        - name: publicId
+          in: path
+          required: true
+          description: Cloudinary public ID (URL encoded nếu có /)
+          schema:
+            type: string
+          example: "products%2Fabc123xyz"
+      responses:
+        "200":
+          description: Xóa thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "Success"
+                  message:
+                    type: string
+                    example: "File deleted successfully"
+        "404":
+          description: File not found
+        "401":
+          description: Unauthorized
+      security:
+        - bearerAuth: []
+
+  # ==================== PRODUCTS API ====================
   /api/products:
     post:
       tags:
         - products
       summary: Add a new product
-      description: Add a new product
+      description: |
+        Tạo sản phẩm mới. **Ảnh sẽ tự động upload lên Cloudinary:**
+        - Gửi `image` dưới dạng base64 string
+        - Backend tự động upload và lưu publicId
+        - Response trả về `imageUrl` và `thumbnailUrl`
       operationId: addProduct
       requestBody:
         description: Create a new product
@@ -5695,30 +5921,46 @@ components:
       xml:
         name: Notification
 
+    # ==================== USER SCHEMA ====================
     User:
       type: object
+      description: |
+        **Tạo/Cập nhật user với avatar Cloudinary:**
+        - Gửi `avatar` dưới dạng base64 string (data:image/jpeg;base64,...)
+        - Backend sẽ tự động upload lên Cloudinary
+        - Response trả về `avatarUrl` và `avatarThumbnail` (Cloudinary CDN URLs)
       properties:
         firstName:
           type: string
+          example: "Nguyễn"
         lastName:
           type: string
+          example: "Văn A"
         middleName:
           type: string
         email:
           type: string
+          example: "user@example.com"
         password:
           type: string
+          example: "Password@123"
         role:
           type: string
-          default: string
+          format: uuid
         phoneNumber:
           type: string
+          example: "0901234567"
         address:
           type: string
         avatar:
           type: string
+          description: |
+            **Input:** Base64 string (data:image/jpeg;base64,/9j/4AAQ...)
+            **Stored:** Cloudinary publicId (avatars/user123xyz)
+          example: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD..."
         city:
           type: string
+          format: uuid
         status:
           type: number
           default: 1
@@ -5730,48 +5972,109 @@ components:
         addresses:
           type: array
           items:
-            type: object
-            properties:
-              firstName:
-                type: string
-              lastName:
-                type: string
-              middleName:
-                type: string
-              phoneNumber:
-                type: string
-              price:
-                type: number
-              discount:
-                type: number
-              product:
-                type: string
-                format: uuid
+            $ref: "#/components/schemas/UserAddress"
       required:
         - email
         - password
       xml:
         name: User
+
+    # User Address schema
+    UserAddress:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        middleName:
+          type: string
+        phoneNumber:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        isDefault:
+          type: boolean
+
+    # Response schema với Cloudinary URLs
+    UserResponse:
+      type: object
+      description: Response khi GET user - có thêm avatarUrl từ Cloudinary
+      properties:
+        _id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        phoneNumber:
+          type: string
+        avatar:
+          type: string
+          description: Cloudinary publicId
+          example: "avatars/user123xyz"
+        avatarUrl:
+          type: string
+          description: Full Cloudinary URL (optimized, 400px)
+          example: "https://res.cloudinary.com/demo/image/upload/w_400,q_auto,f_auto/avatars/user123xyz"
+        avatarThumbnail:
+          type: string
+          description: Thumbnail URL (100x100, cropped)
+          example: "https://res.cloudinary.com/demo/image/upload/w_100,h_100,c_fill,r_max,q_auto,f_auto/avatars/user123xyz"
+        role:
+          type: object
+          properties:
+            _id:
+              type: string
+            name:
+              type: string
+            permissions:
+              type: array
+        status:
+          type: number
+      xml:
+        name: UserResponse
+    # ==================== PRODUCT SCHEMA ====================
     Product:
       type: object
+      description: |
+        **Tạo/Cập nhật sản phẩm với ảnh Cloudinary:**
+        - Gửi `image` dưới dạng base64 string (data:image/jpeg;base64,...)
+        - Backend sẽ tự động upload lên Cloudinary
+        - Response trả về `imageUrl` và `thumbnailUrl` (Cloudinary CDN URLs)
       properties:
         name:
           type: string
+          example: "Giày Nike Air Max"
         slug:
           type: string
+          example: "giay-nike-air-max"
         image:
           type: string
+          description: |
+            **Input:** Base64 string (data:image/jpeg;base64,/9j/4AAQ...)
+            **Stored:** Cloudinary publicId (products/abc123xyz)
+          example: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD..."
         location:
           type: string
           format: uuid
         price:
           type: number
+          example: 2500000
         countInStock:
           type: number
+          example: 100
         description:
           type: string
+          example: "Giày chạy bộ cao cấp"
         discount:
           type: number
+          example: 10
         sold:
           type: number
         type:
@@ -5797,6 +6100,43 @@ components:
         - location
       xml:
         name: Product
+
+    # Response schema với Cloudinary URLs
+    ProductResponse:
+      type: object
+      description: Response khi GET product - có thêm imageUrl từ Cloudinary
+      properties:
+        _id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        image:
+          type: string
+          description: Cloudinary publicId
+          example: "products/abc123xyz"
+        imageUrl:
+          type: string
+          description: Full Cloudinary URL (optimized, 800px width)
+          example: "https://res.cloudinary.com/demo/image/upload/w_800,q_auto,f_auto/products/abc123xyz"
+        thumbnailUrl:
+          type: string
+          description: Thumbnail URL (200x200, cropped)
+          example: "https://res.cloudinary.com/demo/image/upload/w_200,h_200,c_fill,q_auto,f_auto/products/abc123xyz"
+        price:
+          type: number
+        countInStock:
+          type: number
+        description:
+          type: string
+        discount:
+          type: number
+        status:
+          type: number
+      xml:
+        name: ProductResponse
     ProductType:
       type: object
       properties:
