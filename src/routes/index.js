@@ -15,6 +15,7 @@ const CommentRouter = require("./CommentRouter");
 const QueueRouter = require("./QueueRouter");
 const ChatRouter = require("./ChatRouter");
 const UploadRouter = require("./UploadRouter");
+const AnalyticsRouter = require("./AnalyticsRouter");
 
 const routes = (app) => {
   app.use("/api/auth", AuthRouter);
@@ -33,6 +34,7 @@ const routes = (app) => {
   app.use("/api/comments", CommentRouter);
   app.use("/api/chat", ChatRouter); // RAG Chatbot
   app.use("/api/upload", UploadRouter); // Cloudinary Upload
+  app.use("/api/analytics", AnalyticsRouter); // Analytics Dashboard
   app.use("/api", QueueRouter); // Queue Dashboard
 };
 

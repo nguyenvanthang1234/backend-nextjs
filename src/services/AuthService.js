@@ -3,6 +3,7 @@ const bcrypt = require("bcrypt");
 const { generateToken } = require("./JwtService");
 const { CONFIG_MESSAGE_ERRORS, CONFIG_PERMISSIONS, CONFIG_USER_TYPE } = require("../configs");
 const EmailService = require("../services/EmailService");
+const AnalyticsService = require("../services/AnalyticsService");
 const dotenv = require("dotenv");
 const { addToBlacklist, isAdminPermission } = require("../utils");
 const CloudinaryService = require("./CloudinaryService");
@@ -46,6 +47,13 @@ const registerUser = (newUser) => {
         userType: CONFIG_USER_TYPE.DEFAULT,
       });
       if (createdUser) {
+        // Log registration activity
+        AnalyticsService.logActivity({
+          user: createdUser._id,
+          activityType: "register",
+          metadata: { email: createdUser.email },
+        }).catch(err => console.error("[Auth] Error logging registration:", err));
+        
         resolve({
           status: CONFIG_MESSAGE_ERRORS.ACTION_SUCCESS.status,
           message: "Register user success",
@@ -134,6 +142,14 @@ const loginUser = (userLogin) => {
       );
 
       console.log("[LOGIN DEBUG] Login successful for user:", checkUser.email);
+      
+      // Log login activity
+      AnalyticsService.logActivity({
+        user: checkUser._id,
+        activityType: "login",
+        metadata: { email: checkUser.email },
+      }).catch(err => console.error("[Auth] Error logging login:", err));
+      
       resolve({
         status: CONFIG_MESSAGE_ERRORS.ACTION_SUCCESS.status,
         message: "Login Success",

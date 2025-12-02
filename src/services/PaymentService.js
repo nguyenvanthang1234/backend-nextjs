@@ -26,6 +26,9 @@ const createUrlPaymentVNPay = (data, ipAddr) => {
   return new Promise(async (resolve, reject) => {
     const { totalPrice, language, orderId } = data;
     try {
+      console.log("[VNPay] Creating payment URL for order:", orderId);
+      console.log("[VNPay] Data received:", { totalPrice, language, orderId, ipAddr });
+      
       let date = new Date();
       let createDate = moment(date).format("YYYYMMDDHHmmss");
 
@@ -34,6 +37,12 @@ const createUrlPaymentVNPay = (data, ipAddr) => {
       let secretKey = process.env.VNPAY_SECRET_KEY;
       let vnpUrl = process.env.VNPAY_RETURN_URL;
       let bankCode = data.bankCode || "NCB";
+      
+      // Validate env variables
+      if (!tmnCode || !secretKey || !vnpUrl || !returnUrl) {
+        console.error("[VNPay] Missing env variables:", { tmnCode: !!tmnCode, secretKey: !!secretKey, vnpUrl: !!vnpUrl, returnUrl: !!returnUrl });
+        return reject(new Error("Missing VNPay configuration in .env"));
+      }
 
       let locale = language;
       if (locale === null || locale === "") {
@@ -42,18 +51,28 @@ const createUrlPaymentVNPay = (data, ipAddr) => {
       let codeOrder = moment(date).format("DDHHmmss");
 
       let currCode = "VND";
+      
+      // Fix IPv6 localhost to IPv4
+      let clientIp = ipAddr;
+      if (clientIp === "::1" || clientIp === "::ffff:127.0.0.1") {
+        clientIp = "127.0.0.1";
+      }
+      if (clientIp && clientIp.startsWith("::ffff:")) {
+        clientIp = clientIp.replace("::ffff:", "");
+      }
+      
       let vnp_Params = {};
       vnp_Params["vnp_Version"] = "2.1.0";
       vnp_Params["vnp_Command"] = "pay";
       vnp_Params["vnp_TmnCode"] = tmnCode;
       vnp_Params["vnp_Locale"] = locale;
       vnp_Params["vnp_CurrCode"] = currCode;
-      vnp_Params["vnp_TxnRef"] = orderId;
-      vnp_Params["vnp_OrderInfo"] = "Thanh toan cho ma GD:" + codeOrder;
+      vnp_Params["vnp_TxnRef"] = codeOrder;
+      vnp_Params["vnp_OrderInfo"] = "Thanh toan don hang " + orderId;
       vnp_Params["vnp_OrderType"] = "other";
       vnp_Params["vnp_Amount"] = totalPrice * 100;
-      vnp_Params["vnp_ReturnUrl"] = returnUrl;
-      vnp_Params["vnp_IpAddr"] = ipAddr;
+      vnp_Params["vnp_ReturnUrl"] = returnUrl + "?orderId=" + orderId;
+      vnp_Params["vnp_IpAddr"] = clientIp;
       vnp_Params["vnp_CreateDate"] = createDate;
       if (bankCode !== null && bankCode !== "") {
         vnp_Params["vnp_BankCode"] = bankCode;
@@ -65,10 +84,11 @@ const createUrlPaymentVNPay = (data, ipAddr) => {
       let signData = querystring.stringify(vnp_Params, { encode: false });
       let crypto = require("crypto");
       let hmac = crypto.createHmac("sha512", secretKey);
-      let signed = hmac.update(new Buffer(signData, "utf-8")).digest("hex");
+      let signed = hmac.update(Buffer.from(signData, "utf-8")).digest("hex");
       vnp_Params["vnp_SecureHash"] = signed;
       vnpUrl += "?" + querystring.stringify(vnp_Params, { encode: false });
-
+      
+      console.log("[VNPay] Payment URL created successfully");
       resolve({
         status: CONFIG_MESSAGE_ERRORS.ACTION_SUCCESS.status,
         message: "Created url success",
@@ -99,7 +119,7 @@ const getVNPayIpnPaymentVNPay = (data) => {
       let signData = querystring.stringify(vnp_Params, { encode: false });
       let crypto = require("crypto");
       let hmac = crypto.createHmac("sha512", secretKey);
-      let signed = hmac.update(new Buffer(signData, "utf-8")).digest("hex");
+      let signed = hmac.update(Buffer.from(signData, "utf-8")).digest("hex");
 
       if (secureHash === signed) {
         let orderId = vnp_Params["vnp_TxnRef"];
