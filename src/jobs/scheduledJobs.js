@@ -6,6 +6,7 @@ const moment = require("moment");
 const { notificationQueue } = require("../queues");
 const { CONTEXT_NOTIFICATION, ACTION_NOTIFICATION_ORDER } = require("../configs");
 const { getUserAndAdminTokens } = require("../services/NotificationService");
+const AnalyticsService = require("../services/AnalyticsService");
 
 // 1. Auto cancel unpaid orders after 24 hours
 const autoCancelUnpaidOrders = schedule.scheduleJob("0 */1 * * *", async () => {
@@ -159,15 +160,27 @@ const remindPendingDeliveries = schedule.scheduleJob("0 9 * * *", async () => {
   }
 });
 
+// 5. Emit real-time analytics metrics updates
+const emitRealtimeMetrics = schedule.scheduleJob("*/30 * * * * *", async () => {
+  // Chạy mỗi 30 giây
+  try {
+    await AnalyticsService.emitMetricsUpdate();
+  } catch (error) {
+    console.error("❌ Error in emit realtime metrics:", error.message);
+  }
+});
+
 console.log("📅 Scheduled jobs initialized:");
 console.log("  - Auto cancel unpaid orders: Every hour");
 console.log("  - Clean old notifications: Daily at 00:00");
 console.log("  - Update product discounts: Every 6 hours");
 console.log("  - Remind pending deliveries: Daily at 09:00");
+console.log("  - Emit realtime metrics: Every 30 seconds");
 
 module.exports = {
   autoCancelUnpaidOrders,
   cleanOldNotifications,
   updateProductDiscounts,
   remindPendingDeliveries,
+  emitRealtimeMetrics,
 };
