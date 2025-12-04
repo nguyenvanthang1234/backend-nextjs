@@ -13,6 +13,9 @@ const NotificationSchema = new mongoose.Schema({
     timestamps: true
 });
 
+// Index to find notifications for a specific user efficiently
+NotificationSchema.index({ "recipientIds.userId": 1 });
+
 const Notification = mongoose.model("Notification", NotificationSchema);
 
 module.exports = Notification;

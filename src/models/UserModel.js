@@ -63,5 +63,10 @@ const userSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+// Add indexes for better query performance
+userSchema.index({ phoneNumber: 1 });
+userSchema.index({ firstName: 1, lastName: 1 }); // Compound index for name search
+
 const User = mongoose.model("User", userSchema);
 module.exports = User;
