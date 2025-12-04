@@ -35,6 +35,14 @@ const productSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+// Add indexes for better query performance
+productSchema.index({ name: "text" }); // Text index for search
+productSchema.index({ price: 1 }); // Index for sorting/filtering by price
+productSchema.index({ type: 1 }); // Index for filtering by product type
+productSchema.index({ location: 1 }); // Index for filtering by location
+productSchema.index({ status: 1 }); // Index for filtering by status
+
 const Product = mongoose.model("Product", productSchema);
 
 module.exports = Product;

@@ -62,5 +62,12 @@ const orderSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+// Add indexes for better query performance
+orderSchema.index({ user: 1 }); // To find orders by user
+orderSchema.index({ status: 1 }); // To filter orders by status
+orderSchema.index({ isDelivered: 1 }); // To filter by delivery status
+orderSchema.index({ isPaid: 1 }); // To filter by payment status
+
 const Order = mongoose.model("Order", orderSchema);
 module.exports = Order;
